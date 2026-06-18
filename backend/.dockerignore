@@ -1,0 +1,15 @@
+target/
+*.class
+*.jar
+*.war
+.mvn/
+mvnw
+mvnw.cmd
+.idea/
+.vscode/
+*.iml
+Dockerfile
+.git/
+*.log
+data/uploads/
+src/test/

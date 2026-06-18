@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+.git/
+.idea/
+.vscode/
+*.log
+Dockerfile
+package-lock.json
+*.test.js
+*.spec.js
+coverage/
