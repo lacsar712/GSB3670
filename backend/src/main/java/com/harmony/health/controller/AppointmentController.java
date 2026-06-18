@@ -6,19 +6,25 @@ import com.harmony.health.entity.Appointment;
 import com.harmony.health.entity.User;
 import com.harmony.health.mapper.AppointmentMapper;
 import com.harmony.health.mapper.UserMapper;
+import com.harmony.health.service.AppointmentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/appointments")
 public class AppointmentController {
+
+    @Autowired
+    private AppointmentService appointmentService;
 
     @Autowired
     private AppointmentMapper appointmentMapper;
@@ -47,12 +53,29 @@ public class AppointmentController {
         return Result.success(appointmentMapper.selectList(query));
     }
 
+    @GetMapping("/daily-count")
+    public Result<Map<String, Object>> dailyCount(@RequestParam String date) {
+        LocalDate localDate = LocalDate.parse(date);
+        long bookedCount = appointmentService.countByDate(localDate);
+        int remainingSlots = appointmentService.getRemainingSlots(localDate);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("date", date);
+        data.put("bookedCount", bookedCount);
+        data.put("remainingSlots", remainingSlots);
+        data.put("dailyLimit", 5);
+
+        return Result.success(data);
+    }
+
     @PostMapping
     public Result<String> book(@RequestBody Appointment appointment) {
-        appointment.setStatus("PENDING");
-        appointment.setCreatedAt(LocalDateTime.now());
-        appointmentMapper.insert(appointment);
-        return Result.success("预约成功");
+        try {
+            appointmentService.book(appointment);
+            return Result.success("预约成功");
+        } catch (RuntimeException e) {
+            return Result.error(e.getMessage());
+        }
     }
 
     @PutMapping("/{id}/status")
@@ -68,18 +91,15 @@ public class AppointmentController {
         boolean isAdmin = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
 
         if (!isAdmin) {
-            // 通过用户名查出当前用户 ID
             User currentUser = userMapper.selectOne(
                     new LambdaQueryWrapper<User>().eq(User::getUsername, currentUsername)
             );
             if (currentUser == null || !appointment.getUserId().equals(currentUser.getId())) {
                 return Result.error("无权操作他人的预约");
             }
-            // 普通用户只能取消预约
             if (!"CANCELLED".equals(status)) {
                 return Result.error("您只能取消预约");
             }
-            // 只有 PENDING / CONFIRMED 状态才能取消
             if (!"PENDING".equals(appointment.getStatus()) && !"CONFIRMED".equals(appointment.getStatus())) {
                 return Result.error("当前预约状态无法取消");
             }
