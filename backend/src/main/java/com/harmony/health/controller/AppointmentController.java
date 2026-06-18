@@ -4,24 +4,27 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.harmony.health.common.Result;
 import com.harmony.health.entity.Appointment;
 import com.harmony.health.entity.User;
-import com.harmony.health.mapper.AppointmentMapper;
 import com.harmony.health.mapper.UserMapper;
+import com.harmony.health.service.AppointmentService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/appointments")
 public class AppointmentController {
 
     @Autowired
-    private AppointmentMapper appointmentMapper;
+    private AppointmentService appointmentService;
 
     @Autowired
     private UserMapper userMapper;
@@ -44,22 +47,37 @@ public class AppointmentController {
             query.eq(Appointment::getUserId, userId);
         }
 
-        return Result.success(appointmentMapper.selectList(query));
+        return Result.success(appointmentService.list(query));
+    }
+
+    @GetMapping("/daily-count")
+    public Result<Map<String, Object>> dailyCount(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        long booked = appointmentService.countByDate(date);
+        long remaining = appointmentService.remainingByDate(date);
+        Map<String, Object> data = new HashMap<>();
+        data.put("date", date.toString());
+        data.put("limit", AppointmentService.DAILY_LIMIT);
+        data.put("booked", booked);
+        data.put("remaining", remaining);
+        return Result.success(data);
     }
 
     @PostMapping
     public Result<String> book(@RequestBody Appointment appointment) {
-        appointment.setStatus("PENDING");
-        appointment.setCreatedAt(LocalDateTime.now());
-        appointmentMapper.insert(appointment);
-        return Result.success("预约成功");
+        try {
+            appointmentService.book(appointment);
+            return Result.success("预约成功");
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            return Result.error(e.getMessage());
+        }
     }
 
     @PutMapping("/{id}/status")
     public Result<String> updateStatus(@PathVariable Integer id,
                                        @RequestParam String status,
                                        @AuthenticationPrincipal String currentUsername) {
-        Appointment appointment = appointmentMapper.selectById(id);
+        Appointment appointment = appointmentService.getById(id);
         if (appointment == null) {
             return Result.error("预约未找到");
         }
@@ -86,7 +104,7 @@ public class AppointmentController {
         }
 
         appointment.setStatus(status);
-        appointmentMapper.updateById(appointment);
+        appointmentService.updateById(appointment);
         return Result.success("更新成功");
     }
 }
