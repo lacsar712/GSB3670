@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Space, Modal, Form, Input, InputNumber, message, Card, Typography, DatePicker } from 'antd';
+import { Table, Button, Space, Modal, Form, Input, InputNumber, message, Card, Typography, DatePicker, Tag } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../services/api';
@@ -19,6 +19,8 @@ const Packages = () => {
     const [bookingPkg, setBookingPkg] = useState(null);
     const [bookingDate, setBookingDate] = useState(null);
     const [bookingLoading, setBookingLoading] = useState(false);
+    const [remainingSlots, setRemainingSlots] = useState(null);
+    const [checkingSlots, setCheckingSlots] = useState(false);
 
     const role = localStorage.getItem('role');
     const userId = localStorage.getItem('userId');
@@ -54,12 +56,37 @@ const Packages = () => {
     const handleBook = (pkg) => {
         setBookingPkg(pkg);
         setBookingDate(null);
+        setRemainingSlots(null);
         setIsBookingModalOpen(true);
+    };
+
+    const handleDateChange = async (date) => {
+        setBookingDate(date);
+        if (!date) {
+            setRemainingSlots(null);
+            return;
+        }
+        setCheckingSlots(true);
+        try {
+            const res = await api.get('/appointments/daily-count', {
+                params: { date: date.format('YYYY-MM-DD') }
+            });
+            setRemainingSlots(res.remaining);
+        } catch (error) {
+            console.error(error);
+            setRemainingSlots(null);
+        } finally {
+            setCheckingSlots(false);
+        }
     };
 
     const handleBookingConfirm = async () => {
         if (!bookingDate) {
             message.warning('请选择预约日期');
+            return;
+        }
+        if (remainingSlots !== null && remainingSlots <= 0) {
+            message.warning('该日期预约已满，请选择其他日期');
             return;
         }
         setBookingLoading(true);
@@ -72,7 +99,7 @@ const Packages = () => {
             message.success('预约成功！请在预约管理中查看');
             setIsBookingModalOpen(false);
         } catch (error) {
-            message.error('预约失败');
+            message.error(error.message || '预约失败');
         } finally {
             setBookingLoading(false);
         }
@@ -171,7 +198,6 @@ const Packages = () => {
                 </Form>
             </Modal>
 
-            {/* 預約日期选择弹窗 */}
             <Modal
                 title={`预约：${bookingPkg?.name}`}
                 open={isBookingModalOpen}
@@ -180,6 +206,7 @@ const Packages = () => {
                 okText="确认预约"
                 cancelText="取消"
                 confirmLoading={bookingLoading}
+                okButtonProps={{ disabled: remainingSlots !== null && remainingSlots <= 0 }}
                 destroyOnClose
             >
                 <div style={{ margin: '24px 0' }}>
@@ -187,11 +214,22 @@ const Packages = () => {
                     <DatePicker
                         style={{ width: '100%' }}
                         value={bookingDate}
-                        onChange={(date) => setBookingDate(date)}
+                        onChange={handleDateChange}
                         disabledDate={(current) => current && current <= dayjs().endOf('day')}
                         placeholder="请选择日期"
                         format="YYYY-MM-DD"
+                        loading={checkingSlots}
                     />
+                    <div style={{ marginTop: 12 }}>
+                        {bookingDate && remainingSlots !== null && (
+                            remainingSlots > 0 ? (
+                                <Tag color="green">剩余 {remainingSlots} 个名额</Tag>
+                            ) : (
+                                <Tag color="red">已满</Tag>
+                            )
+                        )}
+                        {checkingSlots && <Tag color="processing">查询名额中...</Tag>}
+                    </div>
                 </div>
             </Modal>
         </div>
