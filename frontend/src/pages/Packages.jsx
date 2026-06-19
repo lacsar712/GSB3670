@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Space, Modal, Form, Input, InputNumber, message, Card, Typography, DatePicker } from 'antd';
+import { Table, Button, Space, Modal, Form, Input, InputNumber, message, Card, Typography, DatePicker, Tag } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../services/api';
@@ -19,6 +19,8 @@ const Packages = () => {
     const [bookingPkg, setBookingPkg] = useState(null);
     const [bookingDate, setBookingDate] = useState(null);
     const [bookingLoading, setBookingLoading] = useState(false);
+    const [remainingSlots, setRemainingSlots] = useState(null);
+    const [fetchingSlots, setFetchingSlots] = useState(false);
 
     const role = localStorage.getItem('role');
     const userId = localStorage.getItem('userId');
@@ -54,7 +56,29 @@ const Packages = () => {
     const handleBook = (pkg) => {
         setBookingPkg(pkg);
         setBookingDate(null);
+        setRemainingSlots(null);
         setIsBookingModalOpen(true);
+    };
+
+    const fetchDailyCount = async (date) => {
+        if (!date) {
+            setRemainingSlots(null);
+            return;
+        }
+        setFetchingSlots(true);
+        try {
+            const res = await api.get(`/appointments/daily-count?date=${date.format('YYYY-MM-DD')}`);
+            setRemainingSlots(res);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setFetchingSlots(false);
+        }
+    };
+
+    const handleDateChange = (date) => {
+        setBookingDate(date);
+        fetchDailyCount(date);
     };
 
     const handleBookingConfirm = async () => {
@@ -171,7 +195,7 @@ const Packages = () => {
                 </Form>
             </Modal>
 
-            {/* 預約日期选择弹窗 */}
+            {/* 预约日期选择弹窗 */}
             <Modal
                 title={`预约：${bookingPkg?.name}`}
                 open={isBookingModalOpen}
@@ -180,6 +204,7 @@ const Packages = () => {
                 okText="确认预约"
                 cancelText="取消"
                 confirmLoading={bookingLoading}
+                okButtonProps={{ disabled: remainingSlots === 0 }}
                 destroyOnClose
             >
                 <div style={{ margin: '24px 0' }}>
@@ -187,11 +212,21 @@ const Packages = () => {
                     <DatePicker
                         style={{ width: '100%' }}
                         value={bookingDate}
-                        onChange={(date) => setBookingDate(date)}
+                        onChange={handleDateChange}
                         disabledDate={(current) => current && current <= dayjs().endOf('day')}
                         placeholder="请选择日期"
                         format="YYYY-MM-DD"
+                        loading={fetchingSlots}
                     />
+                    <div style={{ marginTop: 12 }}>
+                        {bookingDate && remainingSlots !== null && (
+                            remainingSlots > 0 ? (
+                                <Tag color="green">剩余 {remainingSlots} 个名额</Tag>
+                            ) : (
+                                <Tag color="red">已满</Tag>
+                            )
+                        )}
+                    </div>
                 </div>
             </Modal>
         </div>
